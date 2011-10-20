@@ -145,3 +145,93 @@ class ImageSizerPlugin(Plugin):
                 continue
 
         return text
+
+
+class ImageFigurePlugin(Plugin):
+    """
+    Each HTML page is modified to add a figure environment around every
+    img tag. The alt text will be transformed to a capiton.
+    """
+
+    def __init__(self, site):
+        super(ImageFigurePlugin, self).__init__(site)
+        self.cache = {}
+
+    def text_resource_complete(self, resource, text):
+        """
+        When the resource is generated, search for img tag and add
+        it to a figure environment.
+
+        Some img tags may be missed, this is not a perfect parser.
+        (parser taken from ImageSizerPlugin)
+        """
+        if not resource.source_file.kind == 'html':
+            return
+
+        pos = 0                 # Position in text
+        img = None              # Position of current img tag
+        state = "find-img"
+        while pos < len(text):
+            if state == "find-img":
+                img = text.find("<img", pos)
+                if img == -1:
+                    break           # No more img tag
+                pos = img + len("<img")
+                if not text[pos].isspace():
+                    continue        # Not an img tag
+                pos = pos + 1
+                tags = {"alt": "",
+                        "title": ""}
+                state = "find-attr"
+                continue
+            if state == "find-attr":
+                if text[pos] == ">":
+                    # We get our img tag
+                    if tags['alt'] != "":
+                        cap = tags['alt']
+                    elif tags['title'] != "":
+                        cap = tags['title']
+                    else:
+                        self.logger.warn(
+                            "[%s] has an image without alt text" % resource)
+                        state = "find-img"
+                        continue
+                    startfigure = "\n<figure>\n  "
+                    caption = "\n  <figcaption>%s</figcaption>\n"%cap
+                    endfigure = "</figure>\n"
+                    pos = pos + 1
+                    text = "".join([text[:img],
+                                    startfigure,
+                                    text[img:pos],
+                                    caption,
+                                    endfigure,
+                                    text[pos:]])
+                    state = "find-img"
+                    continue
+                attr = None
+                for tag in tags:
+                    if text[pos:(pos+len(tag)+1)] == ("%s=" % tag):
+                        attr = tag
+                        pos = pos + len(tag) + 1
+                        break
+                if not attr:
+                    pos = pos + 1
+                    continue
+                if text[pos] in ["'", '"']:
+                    pos = pos + 1
+                state = "get-value"
+                continue
+            if state == "get-value":
+                if text[pos] == ">":
+                    state = "find-attr"
+                    continue
+                if text[pos] in ["'", '"'] or text[pos].isspace():
+                    # We got our value
+                    pos = pos + 1
+                    state = "find-attr"
+                    continue
+                tags[attr] = tags[attr] + text[pos]
+                pos = pos + 1
+                continue
+
+        return text
