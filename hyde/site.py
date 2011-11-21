@@ -4,8 +4,10 @@ Parses & holds information about the site to be generated.
 """
 import os
 import fnmatch
+import sys
 import urlparse
 from functools import wraps
+from urllib import quote
 
 from hyde.exceptions import HydeException
 from hyde.fs import FS, File, Folder
@@ -16,7 +18,7 @@ from hyde.util import getLoggerWithNullHandler
 def path_normalized(f):
     @wraps(f)
     def wrapper(self, path):
-        return f(self, str(path).replace('/', os.sep))
+        return f(self, unicode(path).replace('/', os.sep))
     return wrapper
 
 logger = getLoggerWithNullHandler('hyde.engine')
@@ -48,7 +50,6 @@ class Processable(object):
         Gets the source path of this node.
         """
         return self.source.path
-
 
 class Resource(Processable):
     """
@@ -119,7 +120,7 @@ class Node(Processable):
         self.root = self
         self.module = None
         self.site = None
-        self.source_folder = Folder(str(source_folder))
+        self.source_folder = Folder(unicode(source_folder))
         self.parent = parent
         if parent:
             self.root = self.parent.root
@@ -227,7 +228,7 @@ class RootNode(Node):
         """
         if Folder(path) == self.source_folder:
             return self
-        return self.node_map.get(str(Folder(path)), None)
+        return self.node_map.get(unicode(Folder(path)), None)
 
     @path_normalized
     def node_from_relative_path(self, relative_path):
@@ -236,7 +237,7 @@ class RootNode(Node):
         If no match is found it returns None.
         """
         return self.node_from_path(
-                    self.source_folder.child(str(relative_path)))
+                    self.source_folder.child(unicode(relative_path)))
 
     @path_normalized
     def resource_from_path(self, path):
@@ -244,7 +245,7 @@ class RootNode(Node):
         Gets the resource that maps to the given path.
         If no match is found it returns None.
         """
-        return self.resource_map.get(str(File(path)), None)
+        return self.resource_map.get(unicode(File(path)), None)
 
     @path_normalized
     def resource_from_relative_path(self, relative_path):
@@ -253,14 +254,14 @@ class RootNode(Node):
         If no match is found it returns None.
         """
         return self.resource_from_path(
-                    self.source_folder.child(str(relative_path)))
+                    self.source_folder.child(relative_path))
 
     def resource_deploy_path_changed(self, resource):
         """
         Handles the case where the relative deploy path of a
         resource has changed.
         """
-        self.resource_deploy_map[str(resource.relative_deploy_path)] = resource
+        self.resource_deploy_map[unicode(resource.relative_deploy_path)] = resource
 
     @path_normalized
     def resource_from_relative_deploy_path(self, relative_deploy_path):
@@ -301,7 +302,7 @@ class RootNode(Node):
         node = parent if parent else self
         for h_folder in hierarchy:
             node = node.add_child_node(h_folder)
-            self.node_map[str(h_folder)] = node
+            self.node_map[unicode(h_folder)] = node
             logger.debug("Added node [%s] to [%s]" % (
                             node.relative_path, self.source_folder))
 
@@ -331,7 +332,7 @@ class RootNode(Node):
             node = self.add_node(afile.parent)
 
         resource = node.add_child_resource(afile)
-        self.resource_map[str(afile)] = resource
+        self.resource_map[unicode(afile)] = resource
         logger.debug("Added resource [%s] to [%s]" %
                     (resource.relative_path, self.source_folder))
         return resource
@@ -349,16 +350,24 @@ class RootNode(Node):
 
         with self.source_folder.walker as walker:
 
+            def dont_ignore(name):
+                for pattern in self.site.config.ignore:
+                    if fnmatch.fnmatch(name, pattern):
+                        return False
+                return True
+
             @walker.folder_visitor
             def visit_folder(folder):
-                self.add_node(folder)
+                if dont_ignore(folder.name):
+                    self.add_node(folder)
+                else:
+                    logger.debug("Ignoring node: %s" % folder.name)
+                    return False
 
             @walker.file_visitor
             def visit_file(afile):
-                for pattern in self.site.config.ignore:
-                    if fnmatch.fnmatch(afile.name, pattern):
-                        return
-                self.add_resource(afile)
+                if dont_ignore(afile.name):
+                    self.add_resource(afile)
 
 class Site(object):
     """
@@ -368,6 +377,10 @@ class Site(object):
     def __init__(self, sitepath=None, config=None):
         super(Site, self).__init__()
         self.sitepath = Folder(Folder(sitepath).fully_expanded_path)
+        # Add sitepath to the list of module search paths so that
+        # local plugins can be included.
+        sys.path.insert(0, self.sitepath.fully_expanded_path)
+
         self.config = config if config else Config(self.sitepath)
         self.content = RootNode(self.config.content_root_path, self)
         self.plugins = []
@@ -398,33 +411,46 @@ class Site(object):
         """
         self.content.load()
 
-    def content_url(self, path):
+    def content_url(self, path, safe=None):
         """
         Returns the content url by appending the base url from the config
-        with the given path.
+        with the given path. The return value is url encoded.
         """
-        return Folder(self.config.base_url).child(path).replace(os.sep, '/')
+        fpath = Folder(self.config.base_url) \
+                        .child(path) \
+                        .replace(os.sep, '/').encode("utf-8")
+        if safe is not None:
+            return quote(fpath, safe)
+        else:
+            return quote(fpath)
 
-    def media_url(self, path):
+    def media_url(self, path, safe=None):
         """
         Returns the media url by appending the media base url from the config
-        with the given path.
+        with the given path. The return value is url encoded.
         """
-        return Folder(self.config.media_url).child(path).replace(os.sep, '/')
+        fpath = Folder(self.config.media_url) \
+                        .child(path) \
+                        .replace(os.sep, '/').encode("utf-8")
+        if safe is not None:
+            return quote(fpath, safe)
+        else:
+            return quote(fpath)
 
-    def full_url(self, path):
+    def full_url(self, path, safe=None):
         """
         Determines if the given path is media or content based on the
-        configuration and returns the appropriate url.
+        configuration and returns the appropriate url. The return value
+        is url encoded.
         """
         if urlparse.urlparse(path)[:2] != ("",""):
             return path
         if self.is_media(path):
             relative_path = File(path).get_relative_path(
                                 Folder(self.config.media_root))
-            return self.media_url(relative_path)
+            return self.media_url(relative_path, safe)
         else:
-            return self.content_url(path)
+            return self.content_url(path, safe)
 
     def is_media(self, path):
         """

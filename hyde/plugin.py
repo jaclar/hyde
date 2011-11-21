@@ -8,15 +8,15 @@ from hyde import loader
 
 from hyde.exceptions import HydeException
 from hyde.fs import File
-from hyde.util import getLoggerWithNullHandler, first_match
+from hyde.util import getLoggerWithNullHandler, first_match, discover_executable
 from hyde.model import Expando
 
 from functools import partial
 
+import os
 import re
 import subprocess
 import traceback
-
 
 logger = getLoggerWithNullHandler('hyde.engine')
 
@@ -206,6 +206,8 @@ class CLTransformer(Plugin):
     def plugin_name(self):
         """
         The name of the plugin. Makes an intelligent guess.
+
+        This is used to lookup the settings for the plugin.
         """
 
         return self.__class__.__name__.replace('Plugin', '').lower()
@@ -220,6 +222,15 @@ class CLTransformer(Plugin):
         return {}
 
     @property
+    def executable_name(self):
+        """
+        The executable name for the plugin. This can be overridden in the
+        config. If a configuration option is not provided, this is used
+        to guess the complete path of the executable.
+        """
+        return self.plugin_name
+
+    @property
     def executable_not_found_message(self):
         """
         Message to be displayed if the command line application
@@ -228,7 +239,10 @@ class CLTransformer(Plugin):
 
         return ("%(name)s executable path not configured properly. "
         "This plugin expects `%(name)s.app` to point "
-        "to the `%(name)s` executable." % {"name": self.plugin_name})
+        "to the full path of the `%(exec)s` executable." %
+        {
+            "name":self.plugin_name, "exec": self.executable_name
+        })
 
     @property
     def settings(self):
@@ -247,11 +261,21 @@ class CLTransformer(Plugin):
     def app(self):
         """
         Gets the application path from the site configuration.
+
+        If the path is not configured, attempts to guess the path
+        from the sytem path environment variable.
         """
 
         try:
             app_path = getattr(self.settings, 'app')
         except AttributeError:
+            app_path = self.executable_name
+
+        # Honour the PATH environment variable.
+        if app_path is not None and not os.path.isabs(app_path):
+            app_path = discover_executable(app_path)
+
+        if app_path is None:
             raise self.template.exception_class(
                     self.executable_not_found_message)
 
@@ -297,7 +321,7 @@ class CLTransformer(Plugin):
                 param = "%s%s" % (self.option_prefix(descriptive),
                                         descriptive)
                 if descriptive.endswith("="):
-                    param.append(val)
+                    param += val
                     val = None
                 params.append(param)
                 if val:
@@ -311,7 +335,7 @@ class CLTransformer(Plugin):
         try:
             self.logger.debug(
                 "Calling executable [%s] with arguments %s" %
-                    (args[0], str(args[1:])))
+                    (args[0], unicode(args[1:])))
             subprocess.check_call(args)
         except subprocess.CalledProcessError, error:
             self.logger.error(traceback.format_exc())

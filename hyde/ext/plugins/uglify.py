@@ -15,6 +15,10 @@ class UglifyPlugin(CLTransformer):
         super(UglifyPlugin, self).__init__(site)
 
     @property
+    def executable_name(self):
+        return "uglifyjs"
+
+    @property
     def plugin_name(self):
         """
         The name of the plugin.
@@ -62,9 +66,9 @@ class UglifyPlugin(CLTransformer):
         uglify = self.app
         source = File.make_temp(text)
         target = File.make_temp('')
-        args = [str(uglify)]
+        args = [unicode(uglify)]
         args.extend(self.process_args(supported))
-        args.extend(["-o", str(target), str(source)])
+        args.extend(["-o", unicode(target), unicode(source)])
 
         self.call_app(args)
         out = target.read_all()

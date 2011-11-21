@@ -8,6 +8,7 @@ import select
 import threading
 import urlparse
 import urllib
+import traceback
 from datetime import datetime
 from SimpleHTTPServer import SimpleHTTPRequestHandler
 from BaseHTTPServer import HTTPServer
@@ -55,9 +56,8 @@ class HydeRequestHandler(SimpleHTTPRequestHandler):
         Finds the absolute path of the requested file by
         referring to the `site` variable in the server.
         """
-        path = SimpleHTTPRequestHandler.translate_path(self, path)
         site = self.server.site
-        result = urlparse.urlparse(self.path)
+        result = urlparse.urlparse(urllib.unquote(self.path).decode('utf-8'))
         logger.debug("Trying to load file based on request: [%s]" % result.path)
         path = result.path.lstrip('/')
         res = None
@@ -191,11 +191,14 @@ class HydeWebServer(HTTPServer):
         try:
             logger.info('Regenerating the entire site')
             self.regeneration_time = datetime.now()
+            if self.site.config.needs_refresh():
+                self.site.config.reload()
             self.site.load()
             self.generator.generate_all(incremental=False)
         except Exception, exception:
             logger.error('Error occured when regenerating the site [%s]'
                             % exception.message)
+            logger.error(traceback.format_exc())
 
     def generate_node(self, node):
         """
@@ -213,6 +216,7 @@ class HydeWebServer(HTTPServer):
             logger.error(
                 'Error [%s] occured when generating the node [%s]'
                         % (repr(exception), node))
+            logger.error(traceback.format_exc())
 
     def generate_resource(self, resource):
         """
@@ -231,3 +235,4 @@ class HydeWebServer(HTTPServer):
             logger.error(
                 'Error [%s] occured when serving the resource [%s]'
                         % (repr(exception), resource))
+            logger.error(traceback.format_exc())

@@ -18,6 +18,10 @@ class LessCSSPlugin(CLTransformer):
     def __init__(self, site):
         super(LessCSSPlugin, self).__init__(site)
 
+    @property
+    def executable_name(self):
+        return "lessc"
+
     def begin_site(self):
         """
         Find all the less css files and set their relative deploy path.
@@ -84,9 +88,9 @@ class LessCSSPlugin(CLTransformer):
         less = self.app
         source = File.make_temp(text)
         target = File.make_temp('')
-        args = [str(less)]
+        args = [unicode(less)]
         args.extend(self.process_args(supported))
-        args.extend([str(source), str(target)])
+        args.extend([unicode(source), unicode(target)])
         try:
             self.call_app(args)
         except subprocess.CalledProcessError:

@@ -7,6 +7,7 @@ from datetime import datetime, date
 import os
 import re
 import itertools
+from urllib import quote, unquote
 
 from hyde.fs import File, Folder
 from hyde.model import Expando
@@ -35,26 +36,36 @@ class SilentUndefined(Undefined):
         return self
 
 @contextfunction
-def media_url(context, path):
+def media_url(context, path, safe=None):
     """
     Returns the media url given a partial path.
     """
-    return context['site'].media_url(path)
+    return context['site'].media_url(path, safe)
 
 @contextfunction
-def content_url(context, path):
+def content_url(context, path, safe=None):
     """
     Returns the content url given a partial path.
     """
-    return context['site'].content_url(path)
+    return context['site'].content_url(path, safe)
 
 @contextfunction
-def full_url(context, path):
+def full_url(context, path, safe=None):
     """
     Returns the full url given a partial path.
     """
-    return context['site'].full_url(path)
+    return context['site'].full_url(path, safe)
 
+@contextfilter
+def urlencode(ctx, url, safe=None):
+    if safe is not None:
+        return quote(url.encode('utf8'), safe)
+    else:
+        return quote(url.encode('utf8'))
+
+@contextfilter
+def urldecode(ctx, url):
+    return unquote(url).decode('utf8')
 
 @contextfilter
 def date_format(ctx, dt, fmt=None):
@@ -88,6 +99,25 @@ def xmldatetime(dt):
         zprefix = tz[:3] + ":" + tz[3:]
     return dt.strftime("%Y-%m-%dT%H:%M:%S") + zprefix
 
+@environmentfilter
+def asciidoc(env, value):
+    """
+    (simple) Asciidoc filter
+    """
+    try:
+        from asciidocapi import AsciiDocAPI
+    except ImportError:
+        print u"Requires AsciiDoc library to use AsciiDoc tag."
+        raise
+
+    import StringIO
+    output = value
+
+    asciidoc = AsciiDocAPI()
+    asciidoc.options('--no-header-footer')
+    result = StringIO.StringIO()
+    asciidoc.execute(StringIO.StringIO(output.encode('utf-8')), result, backend='html4')
+    return unicode(result.getvalue(), "utf-8")
 
 @environmentfilter
 def markdown(env, value):
@@ -98,7 +128,7 @@ def markdown(env, value):
         import markdown as md
     except ImportError:
         logger.error(u"Cannot load the markdown library.")
-        raise TemplateError("Cannot load the markdown library")
+        raise TemplateError(u"Cannot load the markdown library")
     output = value
     d = {}
     if hasattr(env.config, 'markdown'):
@@ -106,10 +136,32 @@ def markdown(env, value):
         d['extension_configs'] = getattr(env.config.markdown,
                                         'extension_configs',
                                         Expando({})).to_dict()
+        if hasattr(env.config.markdown, 'output_format'):
+            d['output_format'] = env.config.markdown.output_format
     marked = md.Markdown(**d)
 
     return marked.convert(output)
 
+@environmentfilter
+def restructuredtext(env, value):
+    """
+    RestructuredText filter
+    """
+    try:
+        from docutils.core import publish_parts
+    except ImportError:
+        logger.error(u"Cannot load the docutils library.")
+        raise TemplateError(u"Cannot load the docutils library.")
+
+    highlight_source = False
+    if hasattr(env.config, 'restructuredtext'):
+        highlight_source = getattr(env.config.restructuredtext, 'highlight_source', False)
+
+    if highlight_source:
+        import hyde.lib.pygments.rst_directive
+
+    parts = publish_parts(source=value, writer_name="html")
+    return parts['html_body']
 
 @environmentfilter
 def syntax(env, value, lexer=None, filename=None):
@@ -173,6 +225,31 @@ class Spaceless(Extension):
             return ''
         return re.sub(r'>\s+<', '><', unicode(caller().strip()))
 
+class Asciidoc(Extension):
+    """
+    A wrapper around the asciidoc filter for syntactic sugar.
+    """
+    tags = set(['asciidoc'])
+
+    def parse(self, parser):
+        """
+        Parses the statements and defers to the callback for asciidoc processing.
+        """
+        lineno = parser.stream.next().lineno
+        body = parser.parse_statements(['name:endasciidoc'], drop_needle=True)
+
+        return nodes.CallBlock(
+                    self.call_method('_render_asciidoc'),
+                        [], [], body).set_lineno(lineno)
+
+    def _render_asciidoc(self, caller=None):
+        """
+        Calls the asciidoc filter to transform the output.
+        """
+        if not caller:
+            return ''
+        output = caller().strip()
+        return asciidoc(self.environment, output)
 
 class Markdown(Extension):
     """
@@ -199,6 +276,31 @@ class Markdown(Extension):
             return ''
         output = caller().strip()
         return markdown(self.environment, output)
+
+class restructuredText(Extension):
+    """
+    A wrapper around the restructuredtext filter for syntactic sugar
+    """
+    tags = set(['restructuredtext'])
+
+    def parse(self, parser):
+        """
+        Simply extract our content
+        """
+        lineno = parser.stream.next().lineno
+        body = parser.parse_statements(['name:endrestructuredtext'], drop_needle=True)
+
+        return nodes.CallBlock(self.call_method('_render_rst'), [],  [], body
+                              ).set_lineno(lineno)
+
+    def _render_rst(self, caller=None):
+        """
+        call our restructuredtext filter
+        """
+        if not caller:
+            return ''
+        output = caller().strip()
+        return restructuredtext(self.environment, output)
 
 class YamlVar(Extension):
     """
@@ -470,11 +572,11 @@ class HydeLoader(FileSystemLoader):
         config = site.config if hasattr(site, 'config') else None
         if config:
             super(HydeLoader, self).__init__([
-                            str(config.content_root_path),
-                            str(config.layout_root_path),
+                            unicode(config.content_root_path),
+                            unicode(config.layout_root_path),
                         ])
         else:
-            super(HydeLoader, self).__init__(str(sitepath))
+            super(HydeLoader, self).__init__(unicode(sitepath))
 
         self.site = site
         self.preprocessor = preprocessor
@@ -523,7 +625,9 @@ class Jinja2Template(Template):
         default_extensions = [
                 IncludeText,
                 Spaceless,
+                Asciidoc,
                 Markdown,
+                restructuredText,
                 Syntax,
                 Reference,
                 Refer,
@@ -571,7 +675,11 @@ class Jinja2Template(Template):
         self.env.globals['full_url'] = full_url
         self.env.globals['engine'] = engine
         self.env.globals['deps'] = {}
+        self.env.filters['urlencode'] = urlencode
+        self.env.filters['urldecode'] = urldecode
+        self.env.filters['asciidoc'] = asciidoc
         self.env.filters['markdown'] = markdown
+        self.env.filters['restructuredtext'] = restructuredtext
         self.env.filters['syntax'] = syntax
         self.env.filters['date_format'] = date_format
         self.env.filters['xmldatetime'] = xmldatetime

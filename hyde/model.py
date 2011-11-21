@@ -45,7 +45,7 @@ class Expando(object):
         Sets the expando attribute after
         transforming the value.
         """
-        setattr(self, str(key).encode('utf-8'), self.transform(value))
+        setattr(self, unicode(key).encode('utf-8'), self.transform(value))
 
 
     def transform(self, primitive):
@@ -62,7 +62,7 @@ class Expando(object):
             return primitive
 
     def __repr__(self):
-        return str(self.to_dict())
+        return unicode(self.to_dict())
 
     def to_dict(self):
         """
@@ -95,13 +95,22 @@ class Context(object):
         context = {}
         try:
             context.update(ctx.data.__dict__)
-            for provider_name, resource_name in ctx.providers.__dict__.items():
-                res = File(Folder(sitepath).child(resource_name))
-                if res.exists:
-                    context[provider_name] = Expando(yaml.load(res.read_all()))
         except AttributeError:
             # No context data found
             pass
+
+        providers = {}
+        try:
+            providers.update(ctx.providers.__dict__)
+        except AttributeError:
+            # No providers found
+            pass
+
+        for provider_name, resource_name in providers.items():
+            res = File(Folder(sitepath).child(resource_name))
+            if res.exists:
+                context[provider_name] = Expando(yaml.load(res.read_all()))
+
         return context
 
 class Dependents(IterableUserDict):
@@ -131,7 +140,7 @@ class Config(Expando):
     """
 
     def __init__(self, sitepath, config_file=None, config_dict=None):
-        default_config = dict(
+        self.default_config = dict(
             mode='production',
             content_root='content',
             deploy_root='deploy',
@@ -141,18 +150,17 @@ class Config(Expando):
             base_url="/",
             not_found='404.html',
             plugins = [],
-            ignore = [ "*~", "*.bak" ]
+            ignore = [ "*~", "*.bak", ".hg", ".git", ".svn"],
+            meta = {
+                "nodemeta": 'meta.yaml'
+            }
         )
         self.config_file = config_file
         self.config_dict = config_dict
         self.load_time = datetime.min
         self.config_files = []
         self.sitepath = Folder(sitepath)
-        conf = dict(**default_config)
-        conf.update(self.read_config(config_file))
-        if config_dict:
-            conf.update(config_dict)
-        super(Config, self).__init__(conf)
+        super(Config, self).__init__(self.load())
 
     @property
     def last_modified(self):
@@ -163,6 +171,19 @@ class Config(Expando):
             return True
         return any((conf.has_changed_since(self.load_time)
                         for conf in self.config_files))
+
+    def load(self):
+        conf = dict(**self.default_config)
+        conf.update(self.read_config(self.config_file))
+        if self.config_dict:
+            conf.update(self.config_dict)
+        return conf
+
+    def reload(self):
+        if not self.config_file:
+            return
+        self.update(self.load())
+
 
     def read_config(self, config_file):
         """

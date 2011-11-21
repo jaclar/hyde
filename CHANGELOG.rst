@@ -1,5 +1,72 @@
+Version 0.8.5a1
+============================================================
+
+*   Added ability to specify safe characters in `content_url`,
+    `media_url` functions and `urlencode` filter. (Issue #103)
+
+Version 0.8.4
+============================================================
+
+*   Bug Fix: Configuration now gets reloaded when server regenerates (Issue #70)
+*   Bug Fix: Added styles for codebox (Issue #69)
+*   Tagger now generates archives upfront in begin_site (Issue #72)
+*   **Breaking**: The default nodemeta file has been changed to meta.yaml
+*   Added test for codehilite markdown extension (Issue #82)
+*   Added rst_directive.py from the pygments repository (Issue #82)
+*   Added support for ignoring nodes (Issue #80)
+*   Hyde now ignores .hg, .svn and .git by default (Issue #80)
+*   Added support for default publisher (Issue #83)
+*   Added `urlencode` and `urldecode` filters. (Issue #102)
+*   Bug Fix: Fixed tests for Issue #88
+*   Added tests for sorting groups
+*   Added support for loading modules from the site path. Thanks to
+    @theomega for the idea (Issue #78 & #79)
+*   Added docutils to dev-req.txt
+*   Bug Fix: Fixed uglify-js tests
+
+Thanks to @nud
+
+*   `$PATH` based executable discovery for `CLTransformer` plugins. (Issue #100)
+*   Bug Fix: Fix class name of `test_stylus` (Issue #97)
+
+Thanks to @gfuchedzhy
+
+*   Bug Fix: Textlinks plugin: do nothing if resource doesn't use template (Issue #96)
+*   Bug Fix: Retain permissions in text files during generation (Issue #90)
+*   Bug Fix: Added support for encoded urls to hyde server. (Issue #88)
+*   Bug Fix: Converted `content_url` and `media_url` to encoded urls. (Issue #88)
+*   Bug Fix: All occurrences of `str` replaced with `unicode`. (Issue #87)
+*   Bug Fix: CLTransformer now gracefully handles arguments that have "=". (Issue #58)
+
+Thanks to @vincentbernat
+
+*   Support for `output_format` configuration in markdown (Issue #89)
+
+Thanks to @merlinrebrovic
+
+*   Hyde starter kit extended with advanced options (Issue #68)
+
+Thanks to @tcheneau
+
+*   Added support for AsciiDoc. (Issue #76)
+
+Thanks to @gr3dman
+
+*   Added paginator plugin and tests (Issue #73)
+
+Thanks to @benallard
+
+*   Added restructuredText plugin (Issue #63)
+*   Added restructuredText filter (Issue #63)
+*   Added traceback support for errors when server is running (Issue #63)
+
+Thanks to @rfk
+
+*   Added Sphinx Plugin (Issue #62)
+*   Bug fix: PyFS publisher now checks if the pyfs module is installed. (Issue #62)
+
 Version 0.8.3
-================
+============================================================
 
 *   Bug Fix: A bad bug in Expando that modified the `__dict__` has been fixed.
     (Issue #53)
@@ -49,7 +116,7 @@ Thanks to @vincentbernat
 *   Fixes to CLTransformer (Issue #47)
 
 Version 0.8.2
-=============
+============================================================
 
 Thanks to @merlinrebrovic
 
@@ -75,7 +142,7 @@ Thanks to @pestaa
 
 
 Version 0.8.1
-=============
+============================================================
 
 Thanks to @rfk.
 
@@ -85,12 +152,12 @@ Thanks to @rfk.
 *   PyFS publisher with mtime and etags support. (Issue #28)
 
 Version 0.8
-==============
+============================================================
 
 *   Relative path bugs in windows generation have been fixed.
 
 Version 0.8rc3
-==============
+============================================================
 
 *   Fixed a jinja2 loader path issue that prevented site generation in windows
 *   Fixed tests for stylus plugin to account for more accurate color

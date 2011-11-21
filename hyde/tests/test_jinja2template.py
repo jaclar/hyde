@@ -4,7 +4,7 @@ Use nose
 `$ pip install nose`
 `$ nosetests`
 
-Code borrowed from rwbench.py from the jinja2 examples
+Some code borrowed from rwbench.py from the jinja2 examples
 """
 from datetime import datetime
 from hyde.ext.templates.jinja import Jinja2Template
@@ -33,7 +33,8 @@ class Article(object):
         self.title = generate_lorem_ipsum(1, False, 5, 10)
         self.user = choice(users)
         self.body = generate_lorem_ipsum()
-        self.pub_date = datetime.utcfromtimestamp(randrange(10 ** 9, 2 * 10 ** 9))
+        self.pub_date = datetime.utcfromtimestamp(
+                            randrange(10 ** 9, 2 * 10 ** 9))
         self.published = True
 
 def dateformat(x):
@@ -124,6 +125,48 @@ def test_spaceless():
 """
     assert html.strip() == expected.strip()
 
+def test_asciidoc():
+    source = """
+    {%asciidoc%}
+    == Heading 2 ==
+
+    * test1
+    * test2
+    * test3
+    {%endasciidoc%}
+    """
+    t = Jinja2Template(JINJA2.path)
+    t.configure(None)
+    html = t.render(source, {}).strip()
+    expected_output="""
+    <hr>
+    <h2><a name="_heading_2"></a>Heading 2</h2>
+    <ul>
+    <li>
+    <p>
+    test1
+    </p>
+    </li>
+    <li>
+    <p>
+    test2
+    </p>
+    </li>
+    <li>
+    <p>
+    test3
+    </p>
+    </li>
+    </ul>
+    """
+
+    assert html
+    q = PyQuery(html)
+    assert q
+    assert q("li").length == 3
+    assert q("li:eq(0)").text().strip() == "test1"
+    assert q("li:eq(1)").text().strip() == "test2"
+    assert q("li:eq(2)").text().strip() == "test3"
 
 def test_markdown():
     source = """
@@ -135,6 +178,55 @@ def test_markdown():
     t.configure(None)
     html = t.render(source, {}).strip()
     assert html == u'<h3>Heading 3</h3>'
+
+def test_restructuredtext():
+    source = """
+{% restructuredtext %}
+Hello
+=====
+{% endrestructuredtext %}
+    """
+    t = Jinja2Template(JINJA2.path)
+    t.configure(None)
+    html = t.render(source, {}).strip()
+    assert html == u"""<div class="document" id="hello">
+<h1 class="title">Hello</h1>
+</div>""", html
+
+def test_restructuredtext_with_sourcecode():
+    source = """
+{% restructuredtext %}
+Code
+====
+.. sourcecode:: python
+
+    def add(a, b):
+        return a + b
+
+See `Example`_
+
+.. _Example: example.html
+
+{% endrestructuredtext %}
+"""
+
+    expected = """
+<div class="document" id="code">
+<h1 class="title">Code</h1>
+<div class="highlight"><pre><span class="k">def</span> <span class="nf">add</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">a</span> <span class="o">+</span> <span class="n">b</span>
+</pre></div>
+<p>See <a class="reference external" href="example.html">Example</a></p>
+</div>
+"""
+    t = Jinja2Template(JINJA2.path)
+    s = Site(JINJA2.path)
+    c = Config(JINJA2.path, config_dict=dict(
+                    restructuredtext=dict(highlight_source=True)))
+    s.config = c
+    t.configure(s)
+    html = t.render(source, {}).strip()
+    assert html.strip() == expected.strip()
 
 def test_markdown_with_extensions():
     source = """
@@ -151,6 +243,39 @@ def test_markdown_with_extensions():
     t.env.filters['dateformat'] = dateformat
     html = t.render(source, {}).strip()
     assert html == u'<h3 id="heading_3">Heading 3</h3>'
+
+def test_markdown_with_sourcecode():
+    source = """
+{%markdown%}
+# Code
+
+    :::python
+    def add(a, b):
+        return a + b
+
+See [Example][]
+[Example]: example.html
+
+{%endmarkdown%}
+"""
+
+    expected = """
+    <h1>Code</h1>
+<div class="codehilite"><pre><span class="k">def</span> <span class="nf">add</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">a</span> <span class="o">+</span> <span class="n">b</span>
+</pre></div>
+
+
+<p>See <a href="example.html">Example</a></p>
+    """
+    t = Jinja2Template(JINJA2.path)
+    s = Site(JINJA2.path)
+    c = Config(JINJA2.path, config_dict=dict(
+                    markdown=dict(extensions=['codehilite'])))
+    s.config = c
+    t.configure(s)
+    html = t.render(source, {}).strip()
+    assert html.strip() == expected.strip()
 
 
 def test_line_statements():
@@ -632,5 +757,28 @@ item_list:
         html = t.render(text, {}).strip()
         assert html.strip() == expected.strip()
 
+    def test_urlencode_filter(self):
+        text= u"""
+<a href="{{ 'фотография.jpg'|urlencode }}">фотография</a>
+<a href="{{ 'http://localhost:8080/"abc.jpg'|urlencode }}">quoted</a>
+"""
+        expected = u"""
+<a href="%D1%84%D0%BE%D1%82%D0%BE%D0%B3%D1%80%D0%B0%D1%84%D0%B8%D1%8F.jpg">фотография</a>
+<a href="http%3A//localhost%3A8080/%22abc.jpg">quoted</a>
+"""
+        t = Jinja2Template(JINJA2.path)
+        t.configure(None)
+        html = t.render(text, {}).strip()
+        assert html.strip() == expected.strip()
 
-
+    def test_urldecode_filter(self):
+        text= u"""
+<a href="{{ 'фотография.jpg'|urlencode }}">{{ "%D1%84%D0%BE%D1%82%D0%BE%D0%B3%D1%80%D0%B0%D1%84%D0%B8%D1%8F.jpg"|urldecode }}</a>
+"""
+        expected = u"""
+<a href="%D1%84%D0%BE%D1%82%D0%BE%D0%B3%D1%80%D0%B0%D1%84%D0%B8%D1%8F.jpg">фотография.jpg</a>
+"""
+        t = Jinja2Template(JINJA2.path)
+        t.configure(None)
+        html = t.render(text, {}).strip()
+        assert html.strip() == expected.strip()
