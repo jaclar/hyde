@@ -181,12 +181,17 @@ class ImageFigurePlugin(Plugin):
                     continue        # Not an img tag
                 pos = pos + 1
                 tags = {"alt": "",
-                        "title": ""}
+                        "title": "",
+                        "class": ""}
                 state = "find-attr"
                 continue
             if state == "find-attr":
                 if text[pos] == ">":
                     # We get our img tag
+                    # looking for the "no-figure" class
+                    if tags['class'].find("no-figure") != -1:
+                        state = "find-img"
+                        continue
                     if tags['alt'] != "":
                         cap = tags['alt']
                     elif tags['title'] != "":
