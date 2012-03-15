@@ -201,6 +201,7 @@ class ImageFigurePlugin(Plugin):
                             "[%s] has an image without alt text" % resource)
                         state = "find-img"
                         continue
+
                     startfigure = "\n<figure>\n  "
                     caption = "\n  <figcaption>%s</figcaption>\n"%cap
                     endfigure = "</figure>\n"
@@ -230,7 +231,7 @@ class ImageFigurePlugin(Plugin):
                 if text[pos] == ">":
                     state = "find-attr"
                     continue
-                if text[pos] in ["'", '"'] or text[pos].isspace():
+                if text[pos] in ["'", '"']:
                     # We got our value
                     pos = pos + 1
                     state = "find-attr"
