@@ -6,6 +6,20 @@ This version would not exist without the contributions from the
 
 Contributors
 ===============================================================================
+-   |idank|_
+
+    *   Bug Fix: Tag archive generator uses subscript syntax to avoid failure when tags contain '-' or space.
+    *   Bug Fix: Use `check_output` to avoid a traceback when subprocess command fails.
+
+-   |jd|_
+
+    *   Bug Fix: Metadata Plugin: Do not try to read meta data on `simple_copy` files.
+
+    |vinilios|_
+
+    *   Added a helper method in Expando class to ease up non existing keys handling.
+    *   Some improvements in LessCSSPlugin to be able to build complex less projects (such as twitter bootstrap)
+
 -   |nud|_
 
     *   Bug Fix: Fix class name of `test_stylus`
@@ -110,3 +124,9 @@ Contributors
 .. _theevocater: https://github.com/theevocater
 .. |nud| replace:: Steve Frécinaux
 .. _nud: https://github.com/nud
+.. |vinilios| replace:: Kostas Papadimitriou
+.. _vinilios: https://github.com/vinilios
+.. |jd| replace:: Julien Danjou
+.. _jd: https://github.com/jd
+.. |idank| replace:: idank
+.. _idank: https://github.com/idank

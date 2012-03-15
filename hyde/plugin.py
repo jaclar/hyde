@@ -326,7 +326,7 @@ class CLTransformer(Plugin):
 
         # Honour the PATH environment variable.
         if app_path is not None and not os.path.isabs(app_path):
-            app_path = discover_executable(app_path)
+            app_path = discover_executable(app_path, self.site.sitepath)
 
         if app_path is None:
             raise self.template.exception_class(
@@ -389,7 +389,7 @@ class CLTransformer(Plugin):
             self.logger.debug(
                 "Calling executable [%s] with arguments %s" %
                     (args[0], unicode(args[1:])))
-            subprocess.check_call(args)
+            subprocess.check_output(args)
         except subprocess.CalledProcessError, error:
             self.logger.error(traceback.format_exc())
             self.logger.error(error.output)
