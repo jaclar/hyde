@@ -9,6 +9,76 @@ from hyde.plugin import Plugin
 
 import re
 import Image
+from HTMLParser import HTMLParser
+
+class CssHTMLParser(HTMLParser):
+    def __init__(self,selector,callback):
+        HTMLParser.__init__(self)
+        self._callback = callback
+        # parsing the selector
+        self._selector = self._parse_selector(selector)
+        print "len selector: %d"%len(self._selector)
+        self._selector_pos = 0
+        self._selector_tag_tmp = False
+
+    def _parse_selector(self,selector):
+        """
+        The parsed selector will be an array with dicts as elements
+        which have the form:
+        {'tag':"nameOfTag", 'id':"nameOfID", 'class':["nameOfClass1","nameOfClass2",...]}
+        """
+        parsed = []
+        for el in selector.split():
+            element = {'tag':'', 'id':'', 'class':[]}
+            classes = el.split('.')
+            first = classes.pop(0)
+            element['class'] = classes
+            if first == '':
+                pass
+            elif first[0] == '#':
+                element['id'] = first[1:]
+            else:
+                element['tag'] = first
+            parsed.append(element)
+        return parsed
+
+    def handle_starttag(self,tag,attrs):
+        print "____________________________"
+        print "tag: %s"%tag
+        print "selector pos: %d"%self._selector_pos
+        if self._selector_pos >= len(self._selector):
+            self._selector_pos += 1
+            return
+        sel = self._selector[self._selector_pos]
+        classes = []
+        ID = ''
+        for attr in attrs:
+            if attr[0] == 'class':
+                classes = attr[1].split()
+            elif attr[0] == 'id':
+                ID = attr[1]
+        if (sel['tag'] == tag or sel['tag'] == '') and \
+           (sel['id'] == ID or sel['id'] == '') and \
+           set(sel['class']).issubset(classes):
+            self._selector_pos += 1
+            if(sel['tag'] == ''):
+                self._selector[self._selector_pos]['tag'] = tag
+                self._selector_tag_tmp = True
+        if self._selector_pos == len(self._selector):
+            self._callback(self.getpos(), tag, attrs, self.get_starttag_text())
+        return
+
+    def handle_endtag(self,tag):
+        if self._selector_pos == len(self._selector):
+            if self._selector_tag_tmp:
+                self._selector_tag_tmp = False
+                self._selector[self._selector_pos]['tag'] = ''
+            self._selector_pos -=1
+        if self._selector_pos >= len(self._selector):
+            self._selector_pos -= 1
+            return
+
+
 
 class ImageSizerPlugin(Plugin):
     """
