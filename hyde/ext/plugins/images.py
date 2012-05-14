@@ -43,9 +43,6 @@ class CssHTMLParser(HTMLParser):
         return parsed
 
     def handle_starttag(self,tag,attrs):
-        print "____________________________"
-        print "tag: %s"%tag
-        print "selector pos: %d"%self._selector_pos
         if self._selector_pos >= len(self._selector):
             self._selector_pos += 1
             return
@@ -78,6 +75,25 @@ class CssHTMLParser(HTMLParser):
             self._selector_pos -= 1
             return
 
+def cal(pos, tag, attrs, text):
+    print "##############################"
+    print pos
+    print tag
+    print attrs
+    print text
+    print "##############################"
+
+parser = CssHTMLParser("article p", cal)
+parser.feed(html)
+
+def FindImage(html, selector,callback):
+    """
+    string selector: CSS style selector
+    This function takes an CSS style selectur (article a.blub) and ...
+    does something with a callback function FIXME!
+    """
+    parser = MyHTMLParser
+    parser.feed(html)
 
 
 class ImageSizerPlugin(Plugin):
