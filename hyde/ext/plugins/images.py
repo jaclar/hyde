@@ -14,7 +14,7 @@ from HTMLParser import HTMLParser
 
 class CssHTMLParser(HTMLParser):
     def __init__(self,selector):
-        super(HTMLParser,self).__init__()
+        HTMLParser.__init__(self)
         self._selector = self._parse_selector(selector)
         self._selector_pos = 0
         self._selector_tag_tmp = [False for x in range(len(self._selector))]
@@ -28,7 +28,7 @@ class CssHTMLParser(HTMLParser):
             self._line.append(self._line[i-1]+1+len(data_lines[i-1]))
         del data_lines
         self._data = data
-        super(HTMLParser,self).feed(data)
+        HTMLParser.feed(self,data)
         return self._positions
 
     def _parse_selector(self,selector):
@@ -94,7 +94,7 @@ class CssHTMLParser(HTMLParser):
             self._selector_pos -= 1
 
     def getpos(self):
-        return self._pos_to_char(super(HTMLParser,self).getpos())
+        return self._pos_to_char(HTMLParser.getpos(self))
 
     def _pos_to_char(self,pos):
         return self._line[pos[0]-1] + pos[1]
@@ -257,77 +257,32 @@ class ImageFigurePlugin(Plugin):
         """
         if not resource.source_file.kind == 'html':
             return
-
-        pos = 0                 # Position in text
-        img = None              # Position of current img tag
-        state = "find-img"
-        while pos < len(text):
-            if state == "find-img":
-                img = text.find("<img", pos)
-                if img == -1:
-                    break           # No more img tag
-                pos = img + len("<img")
-                if not text[pos].isspace():
-                    continue        # Not an img tag
-                pos = pos + 1
-                tags = {"alt": "",
-                        "title": "",
-                        "class": ""}
-                state = "find-attr"
-                continue
-            if state == "find-attr":
-                if text[pos] == ">":
-                    # We get our img tag
-                    # looking for the "no-figure" class
-                    if tags['class'].find("no-figure") != -1:
-                        state = "find-img"
-                        continue
-                    if tags['alt'] != "":
-                        cap = tags['alt']
-                    elif tags['title'] != "":
-                        cap = tags['title']
-                    else:
-                        self.logger.warn(
-                            "[%s] has an image without alt text" % resource)
-                        state = "find-img"
-                        continue
-
-                    startfigure = "\n<figure>\n  "
-                    caption = "\n  <figcaption>%s</figcaption>\n"%cap
-                    endfigure = "</figure>\n"
-                    pos = pos + 1
-                    text = "".join([text[:img],
-                                    startfigure,
-                                    text[img:pos],
-                                    caption,
-                                    endfigure,
-                                    text[pos:]])
-                    state = "find-img"
-                    continue
-                attr = None
-                for tag in tags:
-                    if text[pos:(pos+len(tag)+1)] == ("%s=" % tag):
-                        attr = tag
-                        pos = pos + len(tag) + 1
-                        break
-                if not attr:
-                    pos = pos + 1
-                    continue
-                if text[pos] in ["'", '"']:
-                    pos = pos + 1
-                state = "get-value"
-                continue
-            if state == "get-value":
-                if text[pos] == ">":
-                    state = "find-attr"
-                    continue
-                if text[pos] in ["'", '"']:
-                    # We got our value
-                    pos = pos + 1
-                    state = "find-attr"
-                    continue
-                tags[attr] = tags[attr] + text[pos]
-                pos = pos + 1
-                continue
-
+        parser = CssHTMLParser(".post img")
+        imgPositions = parser.feed(text)
+        offset = 0
+        for p in imgPositions:
+            alt = ""
+            title = ""
+            cap = ""
+            # finding the values of the 'alt' and the 'title' aatribute
+            for attr in p['attrs']:
+                if attr[0] == "alt":
+                    alt = attr[1]
+                elif attr[0] == "title":
+                    title = attr[1]
+            if title != "":
+                cap = title
+            elif alt != "":
+                cap = alt
+            else:
+                self.log.warn(
+                     "[%s] has an image without alt text" % resource)
+            pretag = "\n<figure>\n"
+            posttag = "\n  <figcaption>%s</figcaption>\n</figure>\n"%cap
+            text = "".join([text[0:(p['starttag_start'] + offset)],
+                            pretag,
+                            text[(p['starttag_start'] + offset):(p['endtag_end'] + offset)],
+                            posttag,
+                            text[(p['endtag_end'] + offset):]])
+            offset += len(pretag) + len(posttag)
         return text
