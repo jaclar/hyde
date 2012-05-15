@@ -9,23 +9,34 @@ from hyde.plugin import Plugin
 
 import re
 import Image
+
 from HTMLParser import HTMLParser
 
 class CssHTMLParser(HTMLParser):
-    def __init__(self,selector,callback):
-        HTMLParser.__init__(self)
-        self._callback = callback
-        # parsing the selector
+    def __init__(self,selector):
+        super(HTMLParser,self).__init__()
         self._selector = self._parse_selector(selector)
-        print "len selector: %d"%len(self._selector)
         self._selector_pos = 0
-        self._selector_tag_tmp = False
+        self._selector_tag_tmp = [False for x in range(len(self._selector))]
+        self._positions =[]
+        self._line = [0]
+        self._data = ""
+
+    def feed(self,data):
+        data_lines = data.splitlines()
+        for i in range(1,len(data_lines)):
+            self._line.append(self._line[i-1]+1+len(data_lines[i-1]))
+        del data_lines
+        self._data = data
+        super(HTMLParser,self).feed(data)
+        return self._positions
 
     def _parse_selector(self,selector):
         """
         The parsed selector will be an array with dicts as elements
         which have the form:
-        {'tag':"nameOfTag", 'id':"nameOfID", 'class':["nameOfClass1","nameOfClass2",...]}
+        {'tag':"nameOfTag", 'id':"nameOfID",
+         'class':["nameOfClass1","nameOfClass2",...]}
         """
         parsed = []
         for el in selector.split():
@@ -57,43 +68,36 @@ class CssHTMLParser(HTMLParser):
         if (sel['tag'] == tag or sel['tag'] == '') and \
            (sel['id'] == ID or sel['id'] == '') and \
            set(sel['class']).issubset(classes):
-            self._selector_pos += 1
             if(sel['tag'] == ''):
                 self._selector[self._selector_pos]['tag'] = tag
-                self._selector_tag_tmp = True
+                self._selector_tag_tmp[self._selector_pos] = True
+            self._selector_pos += 1
         if self._selector_pos == len(self._selector):
-            self._callback(self.getpos(), tag, attrs, self.get_starttag_text())
-        return
+            self._positions.append({'tag':tag,
+                                    'attrs':attrs,
+                                    'starttag_start':self.getpos(),
+                                    'starttag_end':self.getpos() + \
+                                        len(self.get_starttag_text()),
+                                    'data':self.get_starttag_text()})
 
     def handle_endtag(self,tag):
-        if self._selector_pos == len(self._selector):
-            if self._selector_tag_tmp:
-                self._selector_tag_tmp = False
+        if self._selector_pos == len(self._selector) and \
+           self._selector[self._selector_pos-1]['tag'] == tag:
+            if self._selector_tag_tmp[self._selector_pos-1]:
+                self._selector_tag_tmp[self._selector_pos-1] = False
                 self._selector[self._selector_pos]['tag'] = ''
-            self._selector_pos -=1
-        if self._selector_pos >= len(self._selector):
+            self._positions[-1]['endtag_end'] = \
+                self._data.find('>',self.getpos()) + 1
+            self._positions[-1]['endtag_start'] = self.getpos()
             self._selector_pos -= 1
-            return
+        elif self._selector_pos > len(self._selector):
+            self._selector_pos -= 1
 
-def cal(pos, tag, attrs, text):
-    print "##############################"
-    print pos
-    print tag
-    print attrs
-    print text
-    print "##############################"
+    def getpos(self):
+        return self._pos_to_char(super(HTMLParser,self).getpos())
 
-parser = CssHTMLParser("article p", cal)
-parser.feed(html)
-
-def FindImage(html, selector,callback):
-    """
-    string selector: CSS style selector
-    This function takes an CSS style selectur (article a.blub) and ...
-    does something with a callback function FIXME!
-    """
-    parser = MyHTMLParser
-    parser.feed(html)
+    def _pos_to_char(self,pos):
+        return self._line[pos[0]-1] + pos[1]
 
 
 class ImageSizerPlugin(Plugin):
