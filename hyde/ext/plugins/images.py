@@ -245,7 +245,6 @@ class ImageFigurePlugin(Plugin):
 
     def __init__(self, site):
         super(ImageFigurePlugin, self).__init__(site)
-        self.cache = {}
 
     def text_resource_complete(self, resource, text):
         """
@@ -257,7 +256,7 @@ class ImageFigurePlugin(Plugin):
         """
         if not resource.source_file.kind == 'html':
             return
-        parser = CssHTMLParser(".post img")
+        parser = CssHTMLParser(".figure img")
         imgPositions = parser.feed(text)
         offset = 0
         for p in imgPositions:
@@ -286,3 +285,106 @@ class ImageFigurePlugin(Plugin):
                             text[(p['endtag_end'] + offset):]])
             offset += len(pretag) + len(posttag)
         return text
+
+class ImageLightboxPlugin(Plugin):
+    """
+    Each HTML page is modified to add a rel="lightbox" to each img within
+    an article"
+    """
+
+    def __init__(self, site):
+        super(ImageLightboxPlugin, self).__init__(site)
+        config = self.site.config
+        self.max_width = 0
+        if hasattr(config, 'images'):
+            if hasattr(config.images, 'max_width'):
+                self.max_width = config.images.max_width
+        self.logger.debug("max_width = %d"%self.max_width)
+        self.cache = {}
+
+    def text_resource_complete(self, resource, text):
+        """
+        When the resource is generated, search for img tag and add
+        it to a figure environment.
+
+        Some img tags may be missed, this is not a perfect parser.
+        (parser taken from ImageSizerPlugin)
+        """
+        if self.max_width == 0:
+            return text
+        if not resource.source_file.kind == 'html':
+            return
+        parser = CssHTMLParser(".post img")
+        imgPositions = parser.feed(text)
+        offset = 0
+        for p in imgPositions:
+            img_attrs= p['attrs']
+            src = ""
+            width = 0
+            height = 0
+            for attr in img_attrs:
+                if attr[0] == "src":
+                    src = attr[1]
+            dimensions = self._image_size(src)
+            if dimensions != "":
+                width, height = self._image_size(src)
+            self.logger.debug("%s: %d, %d"%(src,width,height))
+            if width >= self.max_width:
+                before = "<a href='%s' rel='lightbox'>"%src
+                after = "</a>\n"
+                start = p['starttag_start'] + offset
+                end = p['endtag_end'] + offset
+                text = "".join([text[:start],
+                                before,
+                                text[start:end],
+                                after,
+                                text[end:]])
+                offset += len(before) + len(after)
+        return text
+
+    def _image_size(self, src):
+        """
+        Returning the actual size of the image referenced by src
+        """
+        if src is None:
+            self.logger.warn("[%s] has an img tag without src attribute" % resource)
+            return ""           # Nothing
+        if src not in self.cache:
+            if src.startswith(self.site.config.media_url):
+                path = src[len(self.site.config.media_url):].lstrip("/")
+                path = self.site.config.media_root_path.child(path)
+                image = self.site.content.resource_from_relative_deploy_path(path)
+            elif re.match(r'([a-z]+://|//).*', src):
+                # Not a local link
+                return ""       # Nothing
+            elif src.startswith("/"):
+                # Absolute resource
+                path = src.lstrip("/")
+                image = self.site.content.resource_from_relative_deploy_path(path)
+            else:
+                # Relative resource
+                path = resource.node.source_folder.child(src)
+                image = self.site.content.resource_from_path(path)
+            if image is None:
+                self.logger.warn(
+                    "[%s] has an unknown image" % src)
+                return ""       # Nothing
+            if image.source_file.kind not in ['png', 'jpg', 'jpeg', 'gif']:
+                self.logger.warn(
+                        "[%s] has an img tag not linking to an image" % resource)
+                return ""       # Nothing
+            # Now, get the size of the image
+            try:
+                self.cache[src] = Image.open(image.path).size
+            except IOError:
+                self.logger.warn(
+                    "Unable to process image [%s]" % image)
+                self.cache[src] = (None, None)
+                return ""       # Nothing
+            self.logger.debug("Image [%s] is %s" % (src,
+                                                    self.cache[src]))
+        width, height = self.cache[src]
+        if width is None or height is None:
+            return ""           # Nothing
+        else:
+            return (width, height)
